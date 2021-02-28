@@ -1,0 +1,217 @@
+        很多时候我们需要测试数据库中的数值是否正确，期望值则存在excel中，本文将对这个问题展开描述。
+
+一、思路
+       利用feed4junit读取excel中的期望值，在测试方法中连接数据库，读取数据库中的实测值。如下示意：
+
+
+
+二、示例
+1、要查询的数据表结构如下：
+
+
+
+2、期望值excel：
+
+
+
+3、代码：
+
+法一：将数据库操作类分离出来（缺点：数据库连接关闭执行多次）
+
+1）test：
+
+
+复制代码
+ 1 package JunitTestSample0001;
+ 2 
+ 3 import org.databene.benerator.anno.Database;
+ 4 import org.databene.benerator.anno.Source;
+ 5 import org.databene.feed4junit.Feeder;
+ 6 import org.junit.Assert;
+ 7 import org.junit.Test;
+ 8 import org.junit.runner.RunWith;
+ 9 
+10 import java.sql.*;
+11 @RunWith(Feeder.class)
+12 /*此法失败，需要使用配置文件
+13 @Database(
+14         id = "DEEJdb",   
+15         url = "jdbc:oracle:thin:@zs-PC:1521:ytdf",   
+16         driver = "oracle.jdbc.driver.OracleDriver",   
+17         user = "deejuser",   
+18         password = "deejuser") 
+19 */
+20 @Database(id = "DEEJdb", environment = "DEEJdb")  
+21 public  class JunitTest0001 {
+22     /*
+23     public static String actpakagsn;
+24     @Test
+25     @Source(id = "DEEJdb", selector = "select packagsn from product")
+26     public void actualdata(String packagsn) {
+27         System.out.println("-------------");
+28         Assert.assertEquals(packagsn,"11");
+29     }*/
+30     @Test
+31     @Source("testData2.xlsx")
+32     public void expectdata(String BeachID,String AreaID,String WaterTempEva,String WaveHeightEva,String WeatherEva,String TempEva,String WindEva){
+33         ConnectOracle conn=new ConnectOracle();
+34         ResultSet result= conn.ConnectOraclenew(BeachID);
+35         try {
+36             while (result.next()){
+37                 // 当结果集不为空时
+38             // System.out.println(result.getRow()+":"+result.getString(1));
+39             Assert.assertEquals(AreaID,result.getString(2));
+40             Assert.assertEquals(WaterTempEva,result.getString(3));
+41             Assert.assertEquals(WaveHeightEva,result.getString(4));
+42             Assert.assertEquals(WeatherEva,result.getString(5));
+43             Assert.assertEquals(TempEva,result.getString(6));
+44             Assert.assertEquals(WindEva,result.getString(7));
+45             }            
+46                 
+47         } catch (SQLException e) {
+48             // TODO Auto-generated catch block
+49             e.printStackTrace();
+50         } 
+51         conn.closed();
+52     }    
+53 }
+复制代码
+2）数据库操作类：
+
+
+复制代码
+ 1 package JunitTestSample0001;
+ 2 
+ 3 import java.sql.Connection;
+ 4 import java.sql.DriverManager;
+ 5 import java.sql.ResultSet;
+ 6 import java.sql.SQLException;
+ 7 import java.sql.Statement;
+ 8 
+ 9 public class ConnectOracle {
+10     private Connection con= null;// 创建一个数据库连接;
+11     private ResultSet result = null;// 创建一个结果集对象
+12     private Statement stmt = null;
+13     // private String user = "sys as sysdba";
+14     private String user = "deejuser";
+15     private String password = "deejuser";
+16     private String className = "oracle.jdbc.driver.OracleDriver";
+17     private String url = "jdbc:oracle:thin:@zs-PC:1521:ytdf";
+18 
+19     public ResultSet ConnectOraclenew(String BeachID) {    
+20         try
+21          {
+22              Class.forName(className);// 加载Oracle驱动程序
+23              System.out.println("开始尝试连接数据库！");
+24              result=getCon(BeachID);           
+25          }
+26          catch (Exception e)
+27          {     
+28             e.printStackTrace();
+29          }
+30         return result;
+31     }
+32 
+33     /** 创建数据库连接 */
+34     public ResultSet getCon(String BeachID) {
+35         ResultSet rs=null;
+36         try {
+37             con = DriverManager.getConnection(url, user, password);
+38             System.out.println("创建数据库连接成功！");
+39             stmt = con
+40                     .createStatement(ResultSet.TYPE_SCROLL_SENSITIVE,
+41                             ResultSet.CONCUR_UPDATABLE);
+42             String sql = "select * from evaresult_beach where BeachID="+BeachID;
+43              rs= stmt.executeQuery(sql);            
+44         } catch (SQLException e) {
+45             // System.out.print(con);
+46             // System.out.println("创建数据库连接失败！");
+47             con = null;
+48             e.printStackTrace();            
+49         }
+50         return rs;
+51     }
+52     public void closed() {
+53         try {
+54              // 逐一将上面的几个对象关闭，因为不关闭的话会影响性能、并且占用资源
+55             // 注意关闭的顺序，最后使用的最先关闭
+56             if (result != null)
+57                 result.close();
+58             if(stmt!=null)
+59                 stmt.close();      
+60             if (con != null) {
+61                 con.close();
+62             System.out.println("数据库连接已关闭！");
+63             }
+64         } catch (SQLException e) {
+65             e.printStackTrace();
+66         }
+67     }
+68 }
+复制代码
+法二：将数据库连接与关闭写在@BeforeClass @AfterClass中（优点：数据库连接关闭只执行一次）
+
+
+复制代码
+ 1 package oceanmonitoringtest;
+ 2 
+ 3 import org.databene.benerator.anno.Source;
+ 4 import org.databene.feed4junit.Feeder;
+ 5 import org.junit.AfterClass;
+ 6 import org.junit.Assert;
+ 7 import org.junit.BeforeClass;
+ 8 import org.junit.Test;
+ 9 import org.junit.runner.RunWith;
+10 
+11 import java.sql.*;
+12 
+13 @RunWith(Feeder.class) 
+14 public  class Evaresult_beach2 {
+15     private static Connection con= null;// 创建一个数据库连接;
+16     private static ResultSet result = null;// 创建一个结果集对象
+17     private static Statement stmt = null;
+18     
+19     @BeforeClass
+20     public static void setUp() throws Exception {
+21         System.out.println("开始尝试连接数据库！");
+22         Class.forName("oracle.jdbc.driver.OracleDriver");// 加载Oracle驱动程序
+23         con = DriverManager.getConnection( "jdbc:oracle:thin:@zs-PC:1521:ytdf", "deejuser", "deejuser");
+24         System.out.println("创建数据库连接成功！");
+25       stmt = con.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE,
+26                         ResultSet.CONCUR_UPDATABLE);              
+27     }
+28     @Test
+29     @Source("testData2.xlsx")
+30     public void beachevaresult(String BeachID,String AreaID,String WaterTempEva,String WaveHeightEva,String WeatherEva,String TempEva,String WindEva) throws Exception{
+31          String sql = "select * from evaresult_beach where AreaID="+AreaID;
+32           result= stmt.executeQuery(sql);
+33          while (result.next()){
+34                 // 当结果集不为空时
+35             Assert.assertEquals(AreaID,result.getString(2));
+36             Assert.assertEquals(WaterTempEva,result.getString(3));
+37             Assert.assertEquals(WaveHeightEva,result.getString(4));
+38             Assert.assertEquals(WeatherEva,result.getString(5));
+39             Assert.assertEquals(TempEva,result.getString(6));
+40             Assert.assertEquals(WindEva,result.getString(7));
+41             }
+42     }
+43     
+44     @AfterClass
+45      public static void tearDown() throws Exception {
+46              // 逐一将上面的几个对象关闭，因为不关闭的话会影响性能、并且占用资源
+47            // 注意关闭的顺序，最后使用的最先关闭
+48            if (result != null)
+49                result.close();
+50            if(stmt!=null)
+51                stmt.close();      
+52             if (con != null)
+53                 con.close();
+54             System.out.println("数据库连接已关闭！");            
+55     }
+56 }
+复制代码
+4、执行结果
+
+
+
+ 
