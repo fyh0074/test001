@@ -1,0 +1,35 @@
+
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project basedir="." default="build" name="ant_test">
+    <property name="lib" value="E:/workspace/bi_mr_STB/lib" />
+    <path id="ant_test.classpath">
+        <pathelement location="bin" />
+        <pathelement location="${lib}/commons-lang-2.5.jar" />
+    </path>
+    <target name="init">
+        <mkdir dir="bin" />
+        <copy includeemptydirs="false" todir="bin">
+            <fileset dir="src">
+                <exclude name="**/*.java" />
+            </fileset>
+        </copy>
+    </target>
+    <target depends="init" name="build">
+        <echo message="${ant.project.name}: ${ant.file}" file="www.txt" />
+        <javac destdir="bin" debug="true" includeantruntime="false">
+            <src path="src" />
+            <classpath refid="ant_test.classpath" />
+        </javac>
+    </target>
+    <target depends="build" name="dist">
+        <jar destfile="hello-ant.jar" basedir="bin">
+            <manifest>
+                <attribute name="Main-Class" value="com.tq.ant.HelloAnt" />
+            </manifest>
+        </jar>
+    </target>
+    <target name="clean">
+        <delete dir="bin" />
+        <delete file="hello-ant.jar" />
+    </target>
+</project>
